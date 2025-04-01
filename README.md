@@ -21,6 +21,7 @@ Your challenge is to:
 * [Go](https://golang.org/doc/install) 1.24+
 * [Docker](https://docs.docker.com/engine/install/)
 * [Compose](https://docs.docker.com/compose/install/)
+* [golangci-lint](https://golangci-lint.run/)
 
 ## Setup & Environment
 
@@ -146,6 +147,7 @@ For local development:
 - Build and run: `go run ./cmd/server`
 - Run tests: `go test ./...`
 - Build binary: `go build -o adserver ./cmd/server`
+- Linting: `golangci-lint run`
 
 ## Project Structure
 

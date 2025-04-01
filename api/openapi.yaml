@@ -318,7 +318,7 @@ components:
         serve_url:
           type: string
           description: URL to serve for this ad
-          example: "/ad/serve/li_1234567890"
+          example: "/api/v1/lineitems/li_1234567890"
     TrackingEvent:
       type: object
       required:

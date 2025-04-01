@@ -100,7 +100,7 @@ func (s *LineItemService) GetAll(advertiserID, placement string) ([]*model.LineI
 
 // FindMatchingLineItems finds line items matching the given placement and filters
 // This method will be used by the AdService when implementing the ad selection logic
-func (s *LineItemService) FindMatchingLineItems(placement string, category, keyword string) ([]*model.LineItem, error) {
+func (s *LineItemService) FindMatchingLineItems(placement, category, keyword string) ([]*model.LineItem, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

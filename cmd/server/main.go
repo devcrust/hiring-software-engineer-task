@@ -15,23 +15,38 @@ import (
 	fiberlogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
-	// Initialize logger
-	logger, err := zap.NewProduction()
-	if err != nil {
-		fmt.Printf("Error initializing logger: %v\n", err)
-		os.Exit(1)
-	}
-	defer logger.Sync()
-	log := logger.Sugar()
+	var (
+		logger   *zap.Logger
+		logLevel zapcore.Level
+		err      error
+	)
 
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		fmt.Printf("Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
+
+	// Initialize logger
+	if cfg.App.Environment == "development" {
+		logger, err = zap.NewDevelopment()
+	} else {
+		logger, err = zap.NewProduction()
+	}
+
+	if err != nil {
+		fmt.Printf("Error initializing logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = logger.Sync()
+	}()
+	log := logger.Sugar()
 
 	log.Infow("Configuration loaded",
 		"environment", cfg.App.Environment,
@@ -39,9 +54,21 @@ func main() {
 		"server_port", cfg.Server.Port,
 	)
 
+	// Parse log level from configuration
+	if logLevel, err = zapcore.ParseLevel(cfg.App.LogLevel); err != nil {
+		fmt.Printf("Error parsing log level: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check log level increase
+	if logLevel != log.Level() {
+		log = log.WithOptions(zap.IncreaseLevel(logLevel))
+	}
+
 	// Initialize services
 	lineItemService := service.NewLineItemService(log)
-	// Note: AdService implementation is left for the candidate
+	adService := service.NewAdService(lineItemService, log)
+	trackingService := service.NewTrackingService(lineItemService, log)
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
@@ -62,22 +89,24 @@ func main() {
 	api := app.Group("/api/v1")
 
 	// Line Item endpoints
-	lineItemHandler := handler.NewLineItemHandler(lineItemService, log)
+	lineItemHandler := handler.NewLineItemHandler(lineItemService, log.Named("line_items"))
 	api.Post("/lineitems", lineItemHandler.Create)
 	api.Get("/lineitems", lineItemHandler.GetAll)
-	api.Get("/lineitems/:id", lineItemHandler.GetByID)
+	api.Get("/lineitems/:id", lineItemHandler.GetByID).Name(handler.LineItemDetailsRoute)
 
-	// Ad endpoints - TO BE IMPLEMENTED BY CANDIDATE
-	// api.Get("/ads", adHandler.GetWinningAds)
+	// Ad endpoints
+	adHandler := handler.NewAdHandler(adService, log.Named("ads"))
+	api.Get("/ads", adHandler.GetWinningAds)
 
-	// Tracking endpoint - TO BE IMPLEMENTED BY CANDIDATE
-	// api.Post("/tracking", trackingHandler.TrackEvent)
+	// Tracking endpoint
+	trackingHandler := handler.NewTrackingHandler(trackingService, log.Named("tracking"))
+	api.Post("/tracking", trackingHandler.TrackEvent)
 
 	// Start server
 	go func() {
 		address := fmt.Sprintf(":%d", cfg.Server.Port)
 		log.Infof("Starting server on %s", address)
-		if err := app.Listen(address); err != nil {
+		if err = app.Listen(address); err != nil {
 			log.Fatalf("Error starting server: %v", err)
 		}
 	}()
@@ -88,7 +117,7 @@ func main() {
 	<-quit
 	log.Info("Shutting down server...")
 
-	if err := app.Shutdown(); err != nil {
+	if err = app.Shutdown(); err != nil {
 		log.Fatalf("Error shutting down server: %v", err)
 	}
 
